@@ -47,7 +47,6 @@ public class ComplicationConfigActivity extends Activity implements View.OnClick
      * configuration Activity know which complication locations are supported, their ids, and
      * supported complication data types.
      */
-    // TODO: Step 3, intro 1
     public enum ComplicationLocation {
         LEFT,
         RIGHT
@@ -81,7 +80,12 @@ public class ComplicationConfigActivity extends Activity implements View.OnClick
 
         mDefaultAddComplicationDrawable = getDrawable(R.drawable.add_complication);
 
-        // TODO: Step 3, initialize 1
+        mSelectedComplicationId = -1;
+
+        mLeftComplicationId = ComplicationWatchFaceService.getComplicationId(ComplicationLocation.LEFT);
+        mRightComplicationId = ComplicationWatchFaceService.getComplicationId(ComplicationLocation.RIGHT);
+
+        mWatchFaceComponentName = new ComponentName(getApplicationContext(), ComplicationWatchFaceService.class);
 
 
         // Sets up left complication preview.
@@ -102,7 +106,10 @@ public class ComplicationConfigActivity extends Activity implements View.OnClick
         mRightComplication.setImageDrawable(mDefaultAddComplicationDrawable);
         mRightComplicationBackground.setVisibility(View.INVISIBLE);
 
-        // TODO: Step 3, initialize 2
+        mProviderInfoRetriever = new ProviderInfoRetriever(getApplicationContext(), Executors.newCachedThreadPool());
+        mProviderInfoRetriever.init();
+
+        retrieveInitialComplicationsData();
 
     }
 
@@ -110,12 +117,21 @@ public class ComplicationConfigActivity extends Activity implements View.OnClick
     protected void onDestroy() {
         super.onDestroy();
 
-        // TODO: Step 3, release
+        mProviderInfoRetriever.release();
     }
 
-    // TODO: Step 3, retrieve complication data
     public void retrieveInitialComplicationsData() {
+        final int[] complicationIds = ComplicationWatchFaceService.getComplicationsHandler().getComplicationIds();
 
+        mProviderInfoRetriever.retrieveProviderInfo(new ProviderInfoRetriever.OnProviderInfoReceivedCallback() {
+            @Override
+            public void onProviderInfoReceived(int watchFaceComplicationId, @Nullable ComplicationProviderInfo info) {
+                Log.d(TAG, "providerinfo received: " + info);
+
+                updateComplicationViews(watchFaceComplicationId, info);
+            }
+        },
+        mWatchFaceComponentName, complicationIds);
     }
 
     @Override
@@ -132,9 +148,16 @@ public class ComplicationConfigActivity extends Activity implements View.OnClick
 
     // Verifies the watch face supports the complication location, then launches the helper
     // class, so user can choose their complication data provider.
-    // TODO: Step 3, launch data selector
     private void launchComplicationHelperActivity(ComplicationLocation complicationLocation) {
+        mSelectedComplicationId = ComplicationWatchFaceService.getComplicationId(complicationLocation);
 
+        if (mSelectedComplicationId >= 0) {
+            int[] supportedTypes = ComplicationWatchFaceService.getSupportedComplicationTypes(complicationLocation);
+
+            startActivityForResult(ComplicationHelperActivity.createProviderChooserHelperIntent(getApplicationContext(), mWatchFaceComponentName, mSelectedComplicationId, supportedTypes), ComplicationConfigActivity.COMPLICATION_CONFIG_REQUEST_CODE);
+        } else {
+            Log.d(TAG, "Complication not supported by watch face");
+        }
     }
 
     public void updateComplicationViews(
@@ -166,7 +189,12 @@ public class ComplicationConfigActivity extends Activity implements View.OnClick
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == COMPLICATION_CONFIG_REQUEST_CODE && resultCode == RESULT_OK) {
+            ComplicationProviderInfo complicationProviderInfo = data.getParcelableExtra(ProviderChooserIntent.EXTRA_PROVIDER_INFO);
 
-        // TODO: Step 3, update views
+            if (mSelectedComplicationId >= 0) {
+                updateComplicationViews(mSelectedComplicationId, complicationProviderInfo);
+            }
+        }
     }
 }

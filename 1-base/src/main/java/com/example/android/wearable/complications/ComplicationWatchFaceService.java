@@ -15,9 +15,7 @@
  */
 package com.example.android.wearable.complications;
 
-import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -29,12 +27,10 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.support.wearable.complications.ComplicationData;
-import android.support.wearable.complications.ComplicationHelperActivity;
 import android.support.wearable.complications.rendering.ComplicationDrawable;
 import android.support.wearable.watchface.CanvasWatchFaceService;
 import android.support.wearable.watchface.WatchFaceStyle;
 import android.util.Log;
-import android.util.SparseArray;
 import android.view.SurfaceHolder;
 
 import java.util.Calendar;
@@ -44,57 +40,53 @@ import java.util.concurrent.TimeUnit;
 /** Watch Face for "Adding Complications to your Watch Face" code lab. */
 public class ComplicationWatchFaceService extends CanvasWatchFaceService {
 
+
+    static private ComplicationsHandler complications;
+
+    private static final int NUM_COMPLICATIONS = 2;
+
     private static final String TAG = "ComplicationWatchFace";
 
-    // TODO: Step 2, intro 1
     private static final int LEFT_COMPLICATION_ID = 0;
     private static final int RIGHT_COMPLICATION_ID = 1;
 
-    private static final int[] COMPLICATION_IDS = {LEFT_COMPLICATION_ID, RIGHT_COMPLICATION_ID};
-
-    // Left and right dial supported types.
-    private static final int[][] COMPLICATION_SUPPORTED_TYPES = {
-        {
-            ComplicationData.TYPE_RANGED_VALUE,
-            ComplicationData.TYPE_ICON,
-            ComplicationData.TYPE_SHORT_TEXT,
-            ComplicationData.TYPE_SMALL_IMAGE
-        },
-        {
-            ComplicationData.TYPE_RANGED_VALUE,
-            ComplicationData.TYPE_ICON,
-            ComplicationData.TYPE_SHORT_TEXT,
-            ComplicationData.TYPE_SMALL_IMAGE
-        }
-    };
-
     // Used by {@link ComplicationConfigActivity} to retrieve id for complication locations and
     // to check if complication location is supported.
-    // TODO: Step 3, expose complication information, part 1
     static int getComplicationId(
             ComplicationConfigActivity.ComplicationLocation complicationLocation) {
-        return -1;
-    }
-
-    // Used by {@link ComplicationConfigActivity} to retrieve all complication ids.
-    // TODO: Step 3, expose complication information, part 2
-    static int[] getComplicationIds() {
-        return new int[] {};
+        switch (complicationLocation) {
+            case LEFT:
+                return LEFT_COMPLICATION_ID;
+            case RIGHT:
+                return RIGHT_COMPLICATION_ID;
+            default:
+                return -1;
+        }
     }
 
     // Used by {@link ComplicationConfigActivity} to retrieve complication types supported by
     // location.
-    // TODO: Step 3, expose complication information, part 3
     static int[] getSupportedComplicationTypes(
             ComplicationConfigActivity.ComplicationLocation complicationLocation) {
-        return new int[] {};
+        switch (complicationLocation) {
+            case LEFT:
+                return complications.getComplicationSupportedTypes(LEFT_COMPLICATION_ID);
+            case RIGHT:
+                return complications.getComplicationSupportedTypes(RIGHT_COMPLICATION_ID);
+            default:
+                return new int[] {};
+        }
+    }
+
+    static ComplicationsHandler getComplicationsHandler() {
+        return complications;
     }
 
     /*
      * Update rate in milliseconds for interactive mode. We update once a second to advance the
      * second hand.
      */
-    private static final long INTERACTIVE_UPDATE_RATE_MS = TimeUnit.SECONDS.toMillis(1);
+    private static final long INTERACTIVE_UPDATE_RATE_MS = TimeUnit.SECONDS.toMillis(1) / 20;
 
     @Override
     public Engine onCreateEngine() {
@@ -106,6 +98,7 @@ public class ComplicationWatchFaceService extends CanvasWatchFaceService {
 
         private static final float HOUR_AND_MINUTE_STROKE_WIDTH = 5f;
         private static final float SECOND_TICK_STROKE_WIDTH = 2f;
+        private static final int SECOND_TICK_ALPHA = 255;
         private static final float CENTER_GAP_AND_CIRCLE_RADIUS = 4f;
         private static final int SHADOW_RADIUS = 6;
 
@@ -139,16 +132,15 @@ public class ComplicationWatchFaceService extends CanvasWatchFaceService {
         private boolean mBurnInProtection;
 
 
-        // TODO: Step 2, intro 2
-        /* Maps active complication ids to the data for that complication. Note: Data will only be
-         * present if the user has chosen a provider via the settings activity for the watch face.
-         */
-        private SparseArray<ComplicationData> mActiveComplicationDataSparseArray;
-
-        /* Maps complication ids to corresponding ComplicationDrawable that renders the
-         * the complication data on the watch face.
-         */
-        private SparseArray<ComplicationDrawable> mComplicationDrawableSparseArray;
+//        /* Maps active complication ids to the data for that complication. Note: Data will only be
+//         * present if the user has chosen a provider via the settings activity for the watch face.
+//         */
+//        private SparseArray<ComplicationData> mActiveComplicationDataSparseArray;
+//
+//        /* Maps complication ids to corresponding ComplicationDrawable that renders the
+//         * the complication data on the watch face.
+//         */
+//        private SparseArray<ComplicationDrawable> mComplicationDrawableSparseArray;
 
         private final BroadcastReceiver mTimeZoneReceiver =
                 new BroadcastReceiver() {
@@ -180,6 +172,8 @@ public class ComplicationWatchFaceService extends CanvasWatchFaceService {
         public void onCreate(SurfaceHolder holder) {
             super.onCreate(holder);
 
+            initializeComplicationsHandler();
+
             setWatchFaceStyle(
                     new WatchFaceStyle.Builder(ComplicationWatchFaceService.this)
                             .setAcceptsTapEvents(true)
@@ -189,10 +183,22 @@ public class ComplicationWatchFaceService extends CanvasWatchFaceService {
 
             initializeBackground();
 
-            // TODO: Step 2, intro 3
             initializeComplications();
 
             initializeHands();
+        }
+
+        private void initializeComplicationsHandler() {
+            complications = new ComplicationsHandler(NUM_COMPLICATIONS);
+            int[] dataTypes = {
+                    ComplicationData.TYPE_RANGED_VALUE,
+                    ComplicationData.TYPE_ICON,
+                    ComplicationData.TYPE_SHORT_TEXT,
+                    ComplicationData.TYPE_SMALL_IMAGE
+            };
+            for (int i = 0; i < NUM_COMPLICATIONS; i++) {
+                complications.setComplicationSupportedTypes(i, dataTypes);
+            }
         }
 
         private void initializeBackground() {
@@ -200,10 +206,16 @@ public class ComplicationWatchFaceService extends CanvasWatchFaceService {
             mBackgroundPaint.setColor(Color.BLACK);
         }
 
-        // TODO: Step 2, initializeComplications()
         private void initializeComplications() {
-            mActiveComplicationDataSparseArray = new SparseArray<>(COMPLICATION_IDS.length);
-            mComplicationDrawableSparseArray = new SparseArray<>(COMPLICATION_IDS.length);
+            Log.d(TAG, "initializeComplications()");
+
+            for (int i = 0; i < NUM_COMPLICATIONS; i++) {
+                ComplicationDrawable drawable = (ComplicationDrawable) getDrawable(R.drawable.custom_complication_styles);
+                drawable.setContext(getApplicationContext());
+                complications.putComplicationDrawable(i, drawable);
+            }
+
+            setActiveComplications(complications.getComplicationIds());
         }
 
         private void initializeHands() {
@@ -215,7 +227,8 @@ public class ComplicationWatchFaceService extends CanvasWatchFaceService {
             mHourMinuteTicksHandPaint.setShadowLayer(SHADOW_RADIUS, 0, 0, Color.BLACK);
 
             mSecondHandPaint = new Paint();
-            mSecondHandPaint.setColor(Color.RED);
+            mSecondHandPaint.setColor(Color.BLUE);
+            mSecondHandPaint.setAlpha(SECOND_TICK_ALPHA);
             mSecondHandPaint.setStrokeWidth(SECOND_TICK_STROKE_WIDTH);
             mSecondHandPaint.setAntiAlias(true);
             mSecondHandPaint.setStrokeCap(Paint.Cap.ROUND);
@@ -233,69 +246,27 @@ public class ComplicationWatchFaceService extends CanvasWatchFaceService {
             mLowBitAmbient = properties.getBoolean(PROPERTY_LOW_BIT_AMBIENT, false);
             mBurnInProtection = properties.getBoolean(PROPERTY_BURN_IN_PROTECTION, false);
 
-            // Updates complications to properly render in ambient mode based on the
-            // screen's capabilities.
-            ComplicationDrawable complicationDrawable;
-
-            for (int i = 0; i < COMPLICATION_IDS.length; i++) {
-                complicationDrawable = mComplicationDrawableSparseArray.get(COMPLICATION_IDS[i]);
-
-                if(complicationDrawable != null) {
-                    complicationDrawable.setLowBitAmbient(mLowBitAmbient);
-                    complicationDrawable.setBurnInProtection(mBurnInProtection);
-                }
-
-            }
+            complications.onPropertiesChanged(mLowBitAmbient, mBurnInProtection);
         }
 
-        // TODO: Step 2, onComplicationDataUpdate()
+        @Override
+        public void onComplicationDataUpdate(int complicationId, ComplicationData complicationData) {
+            Log.d(TAG, "onComplicationDataUpdate() id: " + complicationId);
 
+            complications.onComplicationDataUpdate(complicationId, complicationData);
 
+            invalidate();
+        }
 
         @Override
         public void onTapCommand(int tapType, int x, int y, long eventTime) {
-            // TODO: Step 5, OnTapCommand()
-        }
+            Log.d(TAG, "ontapcommand");
 
-        /*
-         * Determines if tap inside a complication area or returns -1.
-         */
-        private int getTappedComplicationId(int x, int y) {
-
-            int complicationId;
-            ComplicationData complicationData;
-            ComplicationDrawable complicationDrawable;
-
-            long currentTimeMillis = System.currentTimeMillis();
-
-            for (int i = 0; i < COMPLICATION_IDS.length; i++) {
-                complicationId = COMPLICATION_IDS[i];
-                complicationData = mActiveComplicationDataSparseArray.get(complicationId);
-
-                if ((complicationData != null)
-                        && (complicationData.isActive(currentTimeMillis))
-                        && (complicationData.getType() != ComplicationData.TYPE_NOT_CONFIGURED)
-                        && (complicationData.getType() != ComplicationData.TYPE_EMPTY)) {
-
-                    complicationDrawable = mComplicationDrawableSparseArray.get(complicationId);
-                    Rect complicationBoundingRect = complicationDrawable.getBounds();
-
-                    if (complicationBoundingRect.width() > 0) {
-                        if (complicationBoundingRect.contains(x, y)) {
-                            return complicationId;
-                        }
-                    } else {
-                        Log.e(TAG, "Not a recognized complication id.");
-                    }
-                }
+            switch (tapType) {
+                case TAP_TYPE_TAP:
+                    complications.processTap(x, y, getApplicationContext());
+                    break;
             }
-            return -1;
-        }
-
-        // Fires PendingIntent associated with complication (if it has one).
-        private void onComplicationTap(int complicationId) {
-            // TODO: Step 5, onComplicationTap()
-            Log.d(TAG, "onComplicationTap()");
         }
 
         @Override
@@ -312,12 +283,7 @@ public class ComplicationWatchFaceService extends CanvasWatchFaceService {
 
             updateWatchHandStyles();
 
-            // TODO: Step 2, ambient
-
-
-
-
-
+            complications.onAmbientModeChanged(inAmbientMode);
 
             // Check and trigger whether or not timer should be running (only in active mode).
             updateTimer();
@@ -357,7 +323,8 @@ public class ComplicationWatchFaceService extends CanvasWatchFaceService {
             /*
              * Calculate lengths of different hands based on watch screen size.
              */
-            mSecondHandLength = (float) (mCenterX * 0.875);
+//            mSecondHandLength = (float) (mCenterX * 0.875);
+            mSecondHandLength = mCenterX;
             mMinuteHandLength = (float) (mCenterX * 0.75);
             mHourHandLength = (float) (mCenterX * 0.5);
 
@@ -371,8 +338,17 @@ public class ComplicationWatchFaceService extends CanvasWatchFaceService {
              */
 
             // For most Wear devices, width and height are the same, so we just chose one (width).
-            // TODO: Step 2, calculating ComplicationDrawable locations
+            int sizeOfComplication = width / 3;
+            int midpointOfScreen = width / 2;
 
+            int horizontalOffset = (midpointOfScreen - sizeOfComplication) / 2;
+            int verticalOffset = midpointOfScreen - (sizeOfComplication);
+
+            Rect leftBounds = new Rect(horizontalOffset, verticalOffset, (horizontalOffset + sizeOfComplication), (verticalOffset + sizeOfComplication));
+            Rect rightBounds = new Rect((midpointOfScreen + horizontalOffset), verticalOffset, (midpointOfScreen + horizontalOffset + sizeOfComplication), (verticalOffset + sizeOfComplication));
+
+            complications.setDrawableBounds(LEFT_COMPLICATION_ID, leftBounds);
+            complications.setDrawableBounds(RIGHT_COMPLICATION_ID, rightBounds);
         }
 
         @Override
@@ -382,13 +358,9 @@ public class ComplicationWatchFaceService extends CanvasWatchFaceService {
 
             drawBackground(canvas);
 
-            drawComplications(canvas, now);
+            complications.drawComplications(canvas, now);
 
             drawHands(canvas);
-        }
-
-        private void drawComplications(Canvas canvas, long currentTimeMillis) {
-            // TODO: Step 4, drawComplications()
         }
 
         private void drawBackground(Canvas canvas) {
@@ -405,10 +377,11 @@ public class ComplicationWatchFaceService extends CanvasWatchFaceService {
              * cases where you want to allow users to select their own photos, this dynamically
              * creates them on top of the photo.
              */
+            int numticks = 4;
             float innerTickRadius = mCenterX - 10;
             float outerTickRadius = mCenterX;
-            for (int tickIndex = 0; tickIndex < 12; tickIndex++) {
-                float tickRot = (float) (tickIndex * Math.PI * 2 / 12);
+            for (int tickIndex = 0; tickIndex < numticks; tickIndex++) {
+                float tickRot = (float) (tickIndex * Math.PI * 2 / numticks);
                 float innerX = (float) Math.sin(tickRot) * innerTickRadius;
                 float innerY = (float) -Math.cos(tickRot) * innerTickRadius;
                 float outerX = (float) Math.sin(tickRot) * outerTickRadius;
